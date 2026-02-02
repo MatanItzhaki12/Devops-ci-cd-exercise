@@ -45,3 +45,6 @@ htmlcov/
 temp/
 tmp/
 images_slides/
+
+# Reports
+reports/
