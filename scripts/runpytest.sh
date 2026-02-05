@@ -1,2 +1,2 @@
 #!/bin/bash
-sudo docker run --rm -v "$(pwd)/reports:/app/reports" ci-cd python -m pytest
+sudo docker run --rm -v "$(pwd)/reports:/app/reports" ci-cd python -m pytest tests/unit tests/integration tests/e2e --junitxml=/app/reports/junit.xml --cov=app --cov-report=xml:/app/reports/coverage.xml
