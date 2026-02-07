@@ -169,52 +169,49 @@ pipeline {
             }
             steps {
                 script {
-                    echo "Detecting latest version tag..."
-                    
-                    // 1. Fetch tags to ensure we see them in Jenkins
-                    sh 'git fetch --tags'
+                    // 1. Install simple tools if missing (jq is great for JSON)
+                    sh "apt-get update && apt-get install -y jq curl"
 
-                    // 2. Logic to calculate version (Taken from your snippet)
+                    // 2. Simple one-liner to get the highest tag
+                    // It asks DockerHub for tags -> parses JSON -> sorts list -> takes top one
                     def latestTag = sh(
-                        script: "git tag --sort=-v:refname | grep -Eo 'v[0-9]+\\.[0-9]+\\.[0-9]+' | head -n1 || echo 'v0.0.0'",
+                        script: """
+                            curl -s "https://hub.docker.com/v2/repositories/matan8520/ci-cd-matan/tags/?page_size=100" | \
+                            jq -r '.results[].name' | \
+                            grep -E '^[0-9.]+$' | \
+                            sort -V | tail -n 1
+                        """,
                         returnStdout: true
                     ).trim()
 
-                    if (latestTag == '') {
-                        latestTag = 'v0.0.0'
+                    // Handle "First Run" case
+                    if (latestTag == "" || latestTag == "null") {
+                        latestTag = "0.0.0"
                     }
-                    
-                    echo "Current version: ${latestTag}"
-                    
-                    def parts = latestTag.replace('v','').tokenize('.')
-                    def major = parts[0].toInteger()
-                    def minor = parts[1].toInteger()
-                    def patch = parts[2].toInteger()
 
-                    // Increment patch version (e.g., v0.0.1 -> v0.0.2)
-                    def newVersion = "v${major}.${minor}.${patch + 1}"
-                    echo "Building New Version: ${newVersion}"
+                    echo "Latest Tag found: ${latestTag}"
 
-                    // 3. Login, Build, and Push to Docker Hub
+                    // 3. Simple math to add +1 to the last number
+                    def parts = latestTag.tokenize('.')
+                    def newVersion = "${parts[0]}.${parts[1]}.${parts[2].toInteger() + 1}"
+                    
+                    echo "New Version: ${newVersion}"
+
+                    // 4. Build & Push
                     withCredentials([usernamePassword(
-                        credentialsId: 'docker-hub-creds',
+                        credentialsId: 'docker-hub-creds', 
                         usernameVariable: 'DOCKER_USER',
                         passwordVariable: 'DOCKER_PASS'
                     )]) {
                         sh """
-                            echo "Logging in to Docker Hub..."
                             echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
-
-                            echo "Building image matan8520/ci-cd-matan:${newVersion}..."
+                            
                             docker build -f docker/Dockerfile -t matan8520/ci-cd-matan:${newVersion} .
-
-                            # Tag as 'latest' as well
                             docker tag matan8520/ci-cd-matan:${newVersion} matan8520/ci-cd-matan:latest
-
-                            echo "Pushing images..."
+                            
                             docker push matan8520/ci-cd-matan:${newVersion}
                             docker push matan8520/ci-cd-matan:latest
-
+                            
                             docker logout
                         """
                     }
