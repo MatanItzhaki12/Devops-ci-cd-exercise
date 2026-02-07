@@ -206,7 +206,7 @@ pipeline {
                             echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
 
                             echo "Building image matan8520/ci-cd-matan:${newVersion}..."
-                            # CHANGED: Added 'docker build' command
+                            cd docker
                             docker build -t matan8520/ci-cd-matan:${newVersion} .
 
                             # Tag as 'latest' as well
@@ -219,8 +219,6 @@ pipeline {
                             docker logout
                         """
                     }
-                    
-                    // REMOVED: The Git Push block was deleted as requested.
                 }
             }
         }
