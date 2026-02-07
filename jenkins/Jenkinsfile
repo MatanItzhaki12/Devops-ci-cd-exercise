@@ -163,8 +163,8 @@ pipeline {
             // Run only on main or develop branches
             when {
                 anyOf {
-                    branch '*/main'
-                    branch '*/develop'
+                    branch 'main'
+                    branch 'develop'
                 }
             }
             steps {
