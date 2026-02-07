@@ -17,6 +17,11 @@ def app_server():
 
 @pytest.fixture
 def driver(app_server):
+    from selenium.webdriver.chrome.service import Service
+    from selenium.webdriver.chrome.options import Options
+    from webdriver_manager.chrome import ChromeDriverManager
+    import os
+
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
@@ -25,15 +30,26 @@ def driver(app_server):
     chrome_options.add_argument("--window-size=1920,1080")
     
     try:
-        service = Service(ChromeDriverManager().install())
+        # Install the driver
+        driver_path = ChromeDriverManager().install()
+        
+        # --- THE CHANGED LINES START HERE ---
+        # Fix for "Exec format error": checking if the manager returned the LICENSE file instead of the binary
+        if "THIRD_PARTY_NOTICES" in driver_path:
+            driver_folder = os.path.dirname(driver_path)
+            driver_path = os.path.join(driver_folder, "chromedriver")
+        
+        # Ensure the binary is executable
+        os.chmod(driver_path, 0o755)
+        # --- THE CHANGED LINES END HERE ---
+
+        service = Service(driver_path)
         driver = webdriver.Chrome(service=service, options=chrome_options)
     except Exception as e:
         pytest.fail(f"Failed to initialize Chrome driver: {str(e)}")
     
     driver.implicitly_wait(10)
-    
     yield driver
-    
     driver.quit()
 
 
