@@ -159,19 +159,68 @@ pipeline {
         //     }
         // }
         
-        stage('Build Docker Image') {
+        stage('Build & Push Docker Image') {
+            // Run only on main or develop branches
             when {
                 anyOf {
-                    branch 'main'
-                    branch 'develop'
+                    branch '*/main'
+                    branch '*/develop'
                 }
             }
             steps {
                 script {
-                    sh '''
-                        docker build -t devops-testing-app:${BUILD_NUMBER} .
-                        docker tag devops-testing-app:${BUILD_NUMBER} devops-testing-app:latest
-                    '''
+                    echo "Detecting latest version tag..."
+                    
+                    // 1. Fetch tags to ensure we see them in Jenkins
+                    sh 'git fetch --tags'
+
+                    // 2. Logic to calculate version (Taken from your snippet)
+                    def latestTag = sh(
+                        script: "git tag --sort=-v:refname | grep -Eo 'v[0-9]+\\.[0-9]+\\.[0-9]+' | head -n1 || echo 'v0.0.0'",
+                        returnStdout: true
+                    ).trim()
+
+                    if (latestTag == '') {
+                        latestTag = 'v0.0.0'
+                    }
+                    
+                    echo "Current version: ${latestTag}"
+                    
+                    def parts = latestTag.replace('v','').tokenize('.')
+                    def major = parts[0].toInteger()
+                    def minor = parts[1].toInteger()
+                    def patch = parts[2].toInteger()
+
+                    // Increment patch version (e.g., v0.0.1 -> v0.0.2)
+                    def newVersion = "v${major}.${minor}.${patch + 1}"
+                    echo "Building New Version: ${newVersion}"
+
+                    // 3. Login, Build, and Push to Docker Hub
+                    withCredentials([usernamePassword(
+                        credentialsId: 'docker-hub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh """
+                            echo "Logging in to Docker Hub..."
+                            echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
+
+                            echo "Building image matan8520/ci-cd-matan:${newVersion}..."
+                            # CHANGED: Added 'docker build' command
+                            docker build -t matan8520/ci-cd-matan:${newVersion} .
+
+                            # Tag as 'latest' as well
+                            docker tag matan8520/ci-cd-matan:${newVersion} matan8520/ci-cd-matan:latest
+
+                            echo "Pushing images..."
+                            docker push matan8520/ci-cd-matan:${newVersion}
+                            docker push matan8520/ci-cd-matan:latest
+
+                            docker logout
+                        """
+                    }
+                    
+                    // REMOVED: The Git Push block was deleted as requested.
                 }
             }
         }
