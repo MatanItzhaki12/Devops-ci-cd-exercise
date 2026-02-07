@@ -1,4 +1,3 @@
-test
 # DevOps Exercise - Lesson 47
 
 ## Tasks
