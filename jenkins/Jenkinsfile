@@ -206,8 +206,7 @@ pipeline {
                             echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
 
                             echo "Building image matan8520/ci-cd-matan:${newVersion}..."
-                            cd docker
-                            docker build -t matan8520/ci-cd-matan:${newVersion} .
+                            docker build -f docker/Dockerfile -t matan8520/ci-cd-matan:${newVersion} .
 
                             # Tag as 'latest' as well
                             docker tag matan8520/ci-cd-matan:${newVersion} matan8520/ci-cd-matan:latest
