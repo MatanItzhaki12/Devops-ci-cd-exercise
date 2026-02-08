@@ -10,7 +10,6 @@ pipeline {
         stage('Setup Environment') {
             steps {
                 script {
-                    // Added closing quote to your echo command
                     sh '''
                         echo "Setting up Python environment"
                         
@@ -168,13 +167,10 @@ pipeline {
             }
             steps {
                 script {
-                    // 1. Get credentials for BOTH Docker Hub and GitHub
                     withCredentials([
                         usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS'),
                         usernamePassword(credentialsId: 'github-token', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')
                     ]) {
-                        
-                        // --- A. SETUP GIT ---
                         sh """
                             git config --global user.email "jenkins@ci-cd-pipeline.local"
                             git config --global user.name "Jenkins CI Bot"
@@ -183,8 +179,6 @@ pipeline {
                             git fetch --tags
                         """
 
-                        // --- B. CALCULATE VERSION ---
-                        // Get the latest tag from GIT (e.g., v0.0.5)
                         def latestTag = sh(
                             script: "git tag --sort=-v:refname | grep -E '^v?[0-9.]+\$' | head -n1",
                             returnStdout: true
@@ -196,7 +190,6 @@ pipeline {
                         
                         echo "Latest Git Tag: ${latestTag}"
 
-                        // Logic: v0.0.5 -> v0.0.6
                         def cleanTag = latestTag.replace('v', '')
                         def parts = cleanTag.tokenize('.')
                         def newVersion = "v${parts[0]}.${parts[1]}.${parts[2].toInteger() + 1}"
@@ -205,7 +198,6 @@ pipeline {
                         echo "   New Release Version: ${newVersion}"
                         echo "---------------------------------------"
 
-                        // --- C. DOCKER BUILD & PUSH ---
                         sh """
                             echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
                             
@@ -220,8 +212,6 @@ pipeline {
                             docker logout
                         """
 
-                        // --- D. GIT TAG & PUSH ---
-                        // This updates GitHub so the next build knows to start from v0.0.7
                         sh """
                             echo "Pushing new tag to GitHub..."
                             git tag -a ${newVersion} -m "Jenkins Build ${BUILD_NUMBER}"
@@ -256,63 +246,55 @@ pipeline {
         always {
             sh '''
                 echo "Stopping the application..."
-                # Check if PID file exists, then kill that specific process
                 if [ -f app.pid ]; then
                     kill $(cat app.pid) || true
                     rm app.pid
                 fi
-                
-                # Fallback: Kill any lingering python process matching main.py (Optional safety net)
                 pkill -f main.py || true
 
-                echo "Cleaning up files..."
-                # Remove the virtual environment
+                echo "Removing temporary files..."
+                # NOTE: We do NOT remove the reports directory yet, we need it for the email!
                 rm -rf ${VENV_DIR}
-                
-                # Remove Python cache files
                 find . -type d -name "__pycache__" -exec rm -rf {} +
-                
-                # Remove any downloaded reports or artifacts
-                rm -rf reports htmlcov *.xml *.log
             '''
-            cleanWs()
         }
         success {
             script {
                 sh 'echo "Pipeline completed successfully!"'
+                def userEmail = "mtmt8520@gmail.com" 
+                
                 emailext (
                     subject: "✅ Pipeline Success: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
                     body: """
                         <p>The pipeline completed successfully!</p>
-                        <ul>
-                            <li><strong>Build:</strong> ${env.BUILD_NUMBER}</li>
-                            <li><strong>Branch:</strong> ${env.BRANCH_NAME}</li>
-                            <li><strong>Duration:</strong> ${currentBuild.durationString}</li>
-                            <li><strong>Reports:</strong> Check the artifacts section</li>
-                        </ul>
                         <p><a href="${env.BUILD_URL}">View Build Details</a></p>
                     """,
-                    to: "${env.CHANGE_AUTHOR_EMAIL}"
+                    to: userEmail
                 )
+                cleanWs()
             }
         }
         failure {
             script {
                 sh 'echo "Pipeline failed!"'
+                def userEmail = "mtmt8520@gmail.com"
+                
                 emailext (
                     subject: "❌ Pipeline Failure: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
+                    attachmentsPattern: 'htmlcov/index.html', 
                     body: """
-                        <p>The pipeline failed!</p>
+                        <p><strong>The pipeline failed!</strong></p>
                         <ul>
                             <li><strong>Build:</strong> ${env.BUILD_NUMBER}</li>
                             <li><strong>Branch:</strong> ${env.BRANCH_NAME}</li>
-                            <li><strong>Duration:</strong> ${currentBuild.durationString}</li>
                             <li><strong>Failed Stage:</strong> ${currentBuild.currentResult}</li>
                         </ul>
+                        <p>The Unit Test HTML report is attached to this email.</p>
                         <p><a href="${env.BUILD_URL}">View Build Details</a></p>
                     """,
-                    to: "${env.CHANGE_AUTHOR_EMAIL}"
+                    to: userEmail
                 )
+                cleanWs()
             }
         }
     }
