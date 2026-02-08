@@ -160,7 +160,6 @@ pipeline {
         // }
         
         stage('Build & Push Docker Image') {
-            // Run only on main or develop branches
             when {
                 anyOf {
                     branch 'main'
@@ -169,50 +168,64 @@ pipeline {
             }
             steps {
                 script {
-                    // 1. Install simple tools if missing (jq is great for JSON)
-                    sh "apt-get update && apt-get install -y jq curl"
+                    // 1. Get credentials for BOTH Docker Hub and GitHub
+                    withCredentials([
+                        usernamePassword(credentialsId: 'docker-hub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS'),
+                        usernamePassword(credentialsId: 'github-token', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')
+                    ]) {
+                        
+                        // --- A. SETUP GIT ---
+                        sh """
+                            git config --global user.email "jenkins@ci-cd-pipeline.local"
+                            git config --global user.name "Jenkins CI Bot"
+                            # Important: Set the remote URL to use the token for authentication
+                            git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/MatanItzhaki12/Devops-ci-cd-exercise.git
+                            git fetch --tags
+                        """
 
-                    // 2. Simple one-liner to get the highest tag
-                    // It asks DockerHub for tags -> parses JSON -> sorts list -> takes top one
-                    def latestTag = sh(
-                        script: """
-                            curl -s "https://hub.docker.com/v2/repositories/matan8520/ci-cd-matan/tags/?page_size=100" | \
-                            jq -r '.results[].name' | \
-                            grep -E '^[0-9.]+\$' | \
-                            sort -V | tail -n 1
-                        """,
-                        returnStdout: true
-                    ).trim()
+                        // --- B. CALCULATE VERSION ---
+                        // Get the latest tag from GIT (e.g., v0.0.5)
+                        def latestTag = sh(
+                            script: "git tag --sort=-v:refname | grep -E '^v?[0-9.]+\$' | head -n1",
+                            returnStdout: true
+                        ).trim()
 
-                    // Handle "First Run" case
-                    if (latestTag == "" || latestTag == "null") {
-                        latestTag = "0.0.0"
-                    }
+                        if (latestTag == "") {
+                            latestTag = "v0.0.0"
+                        }
+                        
+                        echo "Latest Git Tag: ${latestTag}"
 
-                    echo "Latest Tag found: ${latestTag}"
+                        // Logic: v0.0.5 -> v0.0.6
+                        def cleanTag = latestTag.replace('v', '')
+                        def parts = cleanTag.tokenize('.')
+                        def newVersion = "v${parts[0]}.${parts[1]}.${parts[2].toInteger() + 1}"
+                        
+                        echo "---------------------------------------"
+                        echo "   New Release Version: ${newVersion}"
+                        echo "---------------------------------------"
 
-                    // 3. Simple math to add +1 to the last number
-                    def parts = latestTag.tokenize('.')
-                    def newVersion = "${parts[0]}.${parts[1]}.${parts[2].toInteger() + 1}"
-                    
-                    echo "New Version: ${newVersion}"
-
-                    // 4. Build & Push
-                    withCredentials([usernamePassword(
-                        credentialsId: 'docker-hub-creds', 
-                        usernameVariable: 'DOCKER_USER',
-                        passwordVariable: 'DOCKER_PASS'
-                    )]) {
+                        // --- C. DOCKER BUILD & PUSH ---
                         sh """
                             echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
                             
+                            echo "Building ${newVersion}..."
                             docker build -f docker/Dockerfile -t matan8520/ci-cd-matan:${newVersion} .
                             docker tag matan8520/ci-cd-matan:${newVersion} matan8520/ci-cd-matan:latest
                             
+                            echo "Pushing Docker images..."
                             docker push matan8520/ci-cd-matan:${newVersion}
                             docker push matan8520/ci-cd-matan:latest
                             
                             docker logout
+                        """
+
+                        // --- D. GIT TAG & PUSH ---
+                        // This updates GitHub so the next build knows to start from v0.0.7
+                        sh """
+                            echo "Pushing new tag to GitHub..."
+                            git tag -a ${newVersion} -m "Jenkins Build ${BUILD_NUMBER}"
+                            git push origin ${newVersion}
                         """
                     }
                 }
