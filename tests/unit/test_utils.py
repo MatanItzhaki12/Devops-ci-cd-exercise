@@ -36,10 +36,10 @@ class TestStringUtils:
     def test_string_contains(self):
         assert "hello" in "hello world"
 
-
 class TestListOperations:
+    #FAILING TEST BELOW ON PURPOSE TO DEMONSTRATE TEST FAILURES
     def test_list_length(self):
-        assert len([1, 2, 3, 4, 5]) == 5
+        assert len([1, 2, 3, 4, 5]) == 8        # This test will fail because the length of the list is actually 5, not 8.
     
     def test_list_append(self):
         my_list = [1, 2, 3]
