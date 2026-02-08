@@ -273,7 +273,6 @@ pipeline {
             script {
                 sh 'echo "Pipeline failed! Inlining CSS into report..."'
                 
-                // --- UPDATED SCRIPT: Handles random filenames (e.g. style_abc123.css) ---
                 sh '''
 cat <<EOF > merge_report.py
 import os
@@ -284,7 +283,7 @@ html_dir = "htmlcov"
 html_path = os.path.join(html_dir, "index.html")
 output_path = os.path.join(html_dir, "email_report.html")
 
-# 1. Find the CSS file (whatever its name is)
+# 1. Find the CSS file
 css_files = glob.glob(os.path.join(html_dir, "*.css"))
 css_path = css_files[0] if css_files else None
 
@@ -295,9 +294,9 @@ if os.path.exists(html_path) and css_path:
     # Create the style block
     style_tag = "<style>\\n" + css_content + "\\n</style>"
 
-    # 2. Use Regex to replace ANY link tag pointing to a .css file
-    # This matches <link rel="stylesheet" href="style_XYZ.css" ... >
-    pattern = r'<link rel="stylesheet" href="[^"]+\.css"[^>]*>'
+    # 2. Regex using [.] instead of backslash to keep Jenkins happy
+    # Matches: <link rel="stylesheet" href="style_XYZ.css" ... >
+    pattern = r'<link rel="stylesheet" href="[^"]+[.]css"[^>]*>'
     
     new_html, count = re.subn(pattern, style_tag, html_content)
     
@@ -307,7 +306,7 @@ if os.path.exists(html_path) and css_path:
         
     with open(output_path, "w") as f:
         f.write(new_html)
-    print(f"Success: Merged {os.path.basename(css_path)} into email_report.html")
+    print("Success: Merged CSS into email_report.html")
 else:
     print("Warning: HTML or CSS file not found.")
 EOF
@@ -317,7 +316,6 @@ EOF
                 
                 def userEmail = "mtmt8520@gmail.com"
                 
-                // Send the new "email_report.html" if created, otherwise fallback
                 def attachment = fileExists('htmlcov/email_report.html') ? 'htmlcov/email_report.html' : 'htmlcov/index.html'
                 
                 emailext (
