@@ -253,7 +253,6 @@ pipeline {
                 pkill -f main.py || true
 
                 echo "Removing temporary files..."
-                # NOTE: We do NOT remove the reports directory yet, we need it for the email!
                 rm -rf ${VENV_DIR}
                 find . -type d -name "__pycache__" -exec rm -rf {} +
             '''
@@ -261,15 +260,10 @@ pipeline {
         success {
             script {
                 sh 'echo "Pipeline completed successfully!"'
-                
                 def userEmail = "mtmt8520@gmail.com" 
-                
                 emailext (
                     subject: "✅ Pipeline Success: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                    body: """
-                        <p>The pipeline completed successfully!</p>
-                        <p><a href="${env.BUILD_URL}">View Build Details</a></p>
-                    """,
+                    body: """<p>The pipeline completed successfully!</p><p><a href="${env.BUILD_URL}">View Build Details</a></p>""",
                     to: userEmail
                 )
                 cleanWs()
@@ -277,47 +271,53 @@ pipeline {
         }
         failure {
             script {
-                sh 'echo "Pipeline failed! Merging CSS for email report..."'
+                sh 'echo "Pipeline failed! Inlining CSS into report..."'
                 
-                // 1. Write the Python script to a file (Safest method)
+                // --- UPDATED SCRIPT: Handles random filenames (e.g. style_abc123.css) ---
                 sh '''
 cat <<EOF > merge_report.py
 import os
+import re
+import glob
 
-html_path = "htmlcov/index.html"
-css_path = "htmlcov/style.css"
-output_path = "htmlcov/email_report.html"
+html_dir = "htmlcov"
+html_path = os.path.join(html_dir, "index.html")
+output_path = os.path.join(html_dir, "email_report.html")
 
-if os.path.exists(html_path) and os.path.exists(css_path):
-    with open(html_path, "r") as f:
-        html_content = f.read()
-    with open(css_path, "r") as f:
-        css_content = f.read()
+# 1. Find the CSS file (whatever its name is)
+css_files = glob.glob(os.path.join(html_dir, "*.css"))
+css_path = css_files[0] if css_files else None
 
-    # Create the inline style block
+if os.path.exists(html_path) and css_path:
+    with open(html_path, "r") as f: html_content = f.read()
+    with open(css_path, "r") as f: css_content = f.read()
+
+    # Create the style block
     style_tag = "<style>\\n" + css_content + "\\n</style>"
 
-    # Simple replace: look for the standard link tag and replace it with the style block
-    if '<link rel="stylesheet" href="style.css">' in html_content:
-        new_html = html_content.replace('<link rel="stylesheet" href="style.css">', style_tag)
-    else:
-        # Fallback: just append it to the head if the link tag isn't exactly as expected
+    # 2. Use Regex to replace ANY link tag pointing to a .css file
+    # This matches <link rel="stylesheet" href="style_XYZ.css" ... >
+    pattern = r'<link rel="stylesheet" href="[^"]+\.css"[^>]*>'
+    
+    new_html, count = re.subn(pattern, style_tag, html_content)
+    
+    # Fallback if regex didn't match
+    if count == 0:
         new_html = html_content.replace("</head>", style_tag + "</head>")
         
     with open(output_path, "w") as f:
         f.write(new_html)
-    print("Success: Created email_report.html")
+    print(f"Success: Merged {os.path.basename(css_path)} into email_report.html")
 else:
-    print("Warning: Files not found. Skipping merge.")
+    print("Warning: HTML or CSS file not found.")
 EOF
                 
-                # 2. Run the script we just created
                 python3 merge_report.py
                 '''
                 
                 def userEmail = "mtmt8520@gmail.com"
                 
-                // 3. Attach the new file if it exists, otherwise the old one
+                // Send the new "email_report.html" if created, otherwise fallback
                 def attachment = fileExists('htmlcov/email_report.html') ? 'htmlcov/email_report.html' : 'htmlcov/index.html'
                 
                 emailext (
@@ -330,7 +330,7 @@ EOF
                             <li><strong>Branch:</strong> ${env.BRANCH_NAME}</li>
                             <li><strong>Failed Stage:</strong> ${currentBuild.currentResult}</li>
                         </ul>
-                        <p>The <strong>Coverage Report</strong> (with fixed styling) is attached to this email.</p>
+                        <p>The <strong>Coverage Report</strong> is attached to this email.</p>
                         <p><a href="${env.BUILD_URL}">View Build Details</a></p>
                     """,
                     to: userEmail
