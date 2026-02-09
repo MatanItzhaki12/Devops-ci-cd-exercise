@@ -42,3 +42,5 @@
 ![Success Pipeline](./images/succsess.png)
 ### Failure pipline example
 ![Fail Pipeline](./images/fail.png)
+### Jira ticket example
+![Jira Ticket](./images/jira_ticket_example.png)
