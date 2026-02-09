@@ -271,11 +271,13 @@ pipeline {
         }
         failure {
             script {
-                sh 'echo "Pipeline failed! Inlining CSS into report..."'
+                sh 'echo "Pipeline failed! Sending email and creating Jira ticket..."'
+                
                 def userEmail = "mtmt8520@gmail.com"         
+                
+                // 1. Email Notification (Clean, no attachment)
                 emailext (
                     subject: "❌ Pipeline Failure: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                    attachmentsPattern: attachment, 
                     body: """
                         <p><strong>The pipeline failed!</strong></p>
                         <ul>
@@ -287,6 +289,8 @@ pipeline {
                     """,
                     to: userEmail
                 )
+
+                // 2. Jira Issue Creation
                 sh 'echo "Creating issue on Jira..."'
                 
                 def jiraProjectKey = 'CCDP'
@@ -296,16 +300,19 @@ pipeline {
                     fields: [
                         project: [key: jiraProjectKey],
                         summary: "New issue from Jenkins: ${env.JOB_NAME} - #${env.BUILD_NUMBER}",
-                        description: '''This is a new issue from Jenkins.
-                        Build Number: ${env.BUILD_NUMBER}
-                        Branch: ${env.BRANCH_NAME}
-                        Duration: ${currentBuild.durationString}
-                        Status: ${currentBuild.currentResult}
-                        Build URL: ${env.BUILD_URL}
-                        ''',
+                        // FIXED: Used triple double-quotes (""") so variables work. 
+                        // Triple single-quotes (''') would simply print "${env.BUILD_NUMBER}" as text.
+                        description: """This is a new issue from Jenkins.
+Build Number: ${env.BUILD_NUMBER}
+Branch: ${env.BRANCH_NAME}
+Duration: ${currentBuild.durationString}
+Status: ${currentBuild.currentResult}
+Build URL: ${env.BUILD_URL}
+""",
                         issuetype: [name: 'Bug']
                     ]
                 ]
+                
                 cleanWs()
             }
         }
