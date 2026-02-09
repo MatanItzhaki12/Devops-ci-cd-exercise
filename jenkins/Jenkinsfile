@@ -275,7 +275,7 @@ pipeline {
                 
                 def userEmail = "mtmt8520@gmail.com"         
                 
-                // 1. Email Notification (Clean, no attachment)
+                // 1. Email Notification
                 emailext (
                     subject: "❌ Pipeline Failure: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
                     body: """
@@ -294,14 +294,12 @@ pipeline {
                 sh 'echo "Creating issue on Jira..."'
                 
                 def jiraProjectKey = 'CCDP'
-                def jiraSite = 'JIRA'
+                def jiraSite = 'CI-CD Devops practice'
 
                 jiraNewIssue site: jiraSite, issue: [
                     fields: [
                         project: [key: jiraProjectKey],
                         summary: "New issue from Jenkins: ${env.JOB_NAME} - #${env.BUILD_NUMBER}",
-                        // FIXED: Used triple double-quotes (""") so variables work. 
-                        // Triple single-quotes (''') would simply print "${env.BUILD_NUMBER}" as text.
                         description: """This is a new issue from Jenkins.
 Build Number: ${env.BUILD_NUMBER}
 Branch: ${env.BRANCH_NAME}
