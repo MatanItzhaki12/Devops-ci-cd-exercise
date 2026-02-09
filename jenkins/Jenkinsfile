@@ -287,6 +287,25 @@ pipeline {
                     """,
                     to: userEmail
                 )
+                sh 'echo "Creating issue on Jira..."'
+                
+                def jiraProjectKey = 'CCDP'
+                def jiraSite = 'JIRA'
+
+                jiraNewIssue site: jiraSite, issue: [
+                    fields: [
+                        project: [key: jiraProjectKey],
+                        summary: "New issue from Jenkins: ${env.JOB_NAME} - #${env.BUILD_NUMBER}",
+                        description: '''This is a new issue from Jenkins.
+                        Build Number: ${env.BUILD_NUMBER}
+                        Branch: ${env.BRANCH_NAME}
+                        Duration: ${currentBuild.durationString}
+                        Status: ${currentBuild.currentResult}
+                        Build URL: ${env.BUILD_URL}
+                        ''',
+                        issuetype: [name: 'Bug']
+                    ]
+                ]
                 cleanWs()
             }
         }
