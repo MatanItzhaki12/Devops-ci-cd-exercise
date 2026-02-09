@@ -38,3 +38,7 @@
 
 ### Architecture of project
 ![Architecture for project](./images/ci_cd_jenkins.png)
+### Success pipline example
+![Success Pipeline](./images/succsess.png)
+### Failure pipline example
+![Fail Pipeline](./images/fail.png)
